@@ -29,10 +29,10 @@ ghmd_toc_version="1.0.0+offline"
 # TOC generator
 #
 gh_toc(){
-	local gh_src=$1
-	local gh_src_copy=$1
-	local gh_ttl_docs=$2
-	local need_replace=$3
+	local gh_src="$1"
+	local gh_ttl_docs="$2"
+	local need_replace="$3"
+	local linkbase="$4"
 
 	if [ "$gh_src" = "" ]; then
 		echo "Please, enter URL or local path for a README.md"
@@ -44,7 +44,6 @@ gh_toc(){
 		echo "Table of Contents"
 		echo "================="
 		echo ""
-		gh_src_copy=""
 	fi
 
 	case "$gh_src" in
@@ -54,8 +53,8 @@ gh_toc(){
 		;;
 	esac
 
-		local toc="$(ghmd_toc_grab < "$gh_src")"
-		echo "$toc"
+		local toc="$(ghmd_toc_grab "$linkbase" < "$gh_src")"
+		printf %s\\n "$toc"
 
 #		if [ "$need_replace" = "yes" ]; then
 #			local ts="<\!--ts-->"
@@ -96,10 +95,11 @@ gh_title_md2anchor() {
 }
 
 ghmd_toc_grab() {
+	local linkbase="$1";shift
 	grep '^#\+[[:space:]]\+[^[:space:]]\+.*$' |
 	while read -r prefix title; do
-		local indent="$(printf %$(( ${#prefix} * 2 ))s '')"
-		printf '%s* [%s](%s#%s)'\\n "$indent" "$title" "README.md" "$(gh_title_md2anchor "$title")"
+		local indent="$(printf %$(( ${#prefix} * 3 ))s '')"
+		printf '%s%s [%s](%s#%s)'\\n "$indent" "${itemprefix:-*}" "$title" "$linkbase" "$(gh_title_md2anchor "$title")"
 	done
 }
 
@@ -107,7 +107,7 @@ ghmd_toc_grab() {
 # Options hendlers
 #
 gh_toc_app() {
-	local app_name=$(basename $0)
+	local app_name="$(basename $0)"
 	local need_replace="no"
 
 	if [ "$1" = '--help' ] || [ $# -eq 0 ] ; then
@@ -118,6 +118,9 @@ gh_toc_app() {
 		echo "  $app_name -                     Create TOC for markdown from STDIN"
 		echo "  $app_name --help                Show help"
 		echo "  $app_name --version             Show version"
+		echo "  $app_name --itemprefix          Choose a custom item prefix"
+		echo "  $app_name --linkbase            Choose a custom link base"
+		echo "  $app_name --basename            Use the basename of the file to define the linkbase"
 		return
 	fi
 
@@ -149,14 +152,37 @@ gh_toc_app() {
 #		return
 #	fi
 
-	if [ "$1" = '--insert' ]; then
-		need_replace="yes"
+	local itemprefix='*'
+	local linkbase=''
+	local usebasename=false
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		(--itemprefix)
+			shift; itemprefix="$1"
+		;;
+		(--linkbase)
+			shift; linkbase="$1"
+			usebasename=false
+		;;
+		(--basename)
+			usebasename=true
+		;;
+		(--insert)
+			need_replace="yes"
+		;;
+		(--) shift;break ;;
+		(-*) echo >&2 "ERROR: invalid option $1"; return 1;;
+		(*) break ;;
+		esac
 		shift
-	fi
+	done
 
 	for md in "$@"; do
 		echo ""
-		gh_toc "$md" "$#" "$need_replace"
+		if ${usebasename:-false}; then
+			linkbase="$(basename -- "$md")"
+		fi
+		gh_toc "$md" "$#" "$need_replace" "$linkbase"
 	done
 
 #	echo ""
